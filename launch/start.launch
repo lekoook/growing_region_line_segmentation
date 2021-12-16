@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<launch>
+    <node pkg="growing_region_line_segmentation" type="growing_region_line_segmentation_node" name="line_segmentation" 
+        output="screen"/>
+</launch>
