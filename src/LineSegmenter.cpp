@@ -39,6 +39,7 @@ void LineSegmenter::_timerCb(const ros::TimerEvent& event)
 
 void LineSegmenter::_extractPoints(const sensor_msgs::LaserScan& scanMsg)
 {
+    _laserFrame = scanMsg.header.frame_id;
     _scanPoints.clear();
     for (int i = 0; i < (int)scanMsg.ranges.size(); i++)
     {
@@ -391,7 +392,7 @@ void LineSegmenter::_generateEndpoints()
 void LineSegmenter::_markLine(Line line, Point pt1, Point pt2, int id, std::string ns)
 {
     visualization_msgs::Marker marker;
-    marker.header.frame_id = "laser";
+    marker.header.frame_id = _laserFrame;
     marker.header.stamp = ros::Time();
     marker.ns = ns;
     marker.id = id;

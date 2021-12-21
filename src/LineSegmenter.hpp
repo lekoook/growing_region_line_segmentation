@@ -68,6 +68,7 @@ private:
     double _updateFreq;
     double _minLen;
     bool _toCompute;
+    std::string _laserFrame;
     std::vector<ScanPoint> _scanPoints;
     std::vector<LineSegment> _segments;
 
