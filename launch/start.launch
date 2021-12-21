@@ -1,5 +1,7 @@
 <?xml version="1.0" ?>
 <launch>
     <node pkg="growing_region_line_segmentation" type="growing_region_line_segmentation_node" name="line_segmentation" 
-        output="screen"/>
+        output="screen">
+        <rosparam command="load" file="$(find growing_region_line_segmentation)/config/segmentation.yaml"/>
+    </node>
 </launch>
