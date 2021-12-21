@@ -227,7 +227,7 @@ void LineSegmenter::_generateSegments()
             // Grow this seed into a full line segment.
             if (_growSeed(seed))
             {
-                start = seed.endIdx;
+                start = seed.lastIdx;
                 _segments.push_back(seed);
                 _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, fullId++, "raw_segments");
             }
@@ -315,8 +315,8 @@ bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
 
 bool LineSegmenter::_growSeed(LineSegment& seed)
 {
-    int pb = seed.startIdx;
-    int pf = seed.endIdx + 1;
+    int pb = seed.firstIdx;
+    int pf = seed.lastIdx + 1;
 
     // TODO: Refit and grow both ends of the segment together in a one iteration instead of two.
 
@@ -337,7 +337,7 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
     }
     int o = pf;
     pf--; // Reset pf back to the largest possible index value.
-    seed.endIdx = pf;
+    seed.lastIdx = pf;
     seed.lastPoint = _scanPoints[pf];
 
     // Refit and grow the start.
@@ -356,7 +356,7 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
         }
     }
     pb++; // Reset pb back to the lowest possible index value.
-    seed.startIdx = pb;
+    seed.firstIdx = pb;
     seed.firstPoint = _scanPoints[pb];
 
     double lineLen = _pt2PtDist2D(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint);
@@ -377,7 +377,7 @@ void LineSegmenter::_processOverlap()
         for (int j = i + 1; j < _segments.size(); j++)
         {
             auto second = _segments[j];
-            if (first.endIdx >= second.startIdx)
+            if (first.lastIdx >= second.firstIdx)
             {
                 double firstTheta = atan2(-first.line.xCoeff, first.line.yCoeff);
                 double secondTheta = atan2(-second.line.xCoeff, second.line.yCoeff);
@@ -385,13 +385,13 @@ void LineSegmenter::_processOverlap()
 
                 if (deltaTheta < _colThresh)
                 {
-                    int newStart = std::min<double>(first.startIdx, second.startIdx);
-                    auto newBestLine = _orthgLineFit(newStart, second.endIdx);
+                    int newStart = std::min<double>(first.firstIdx, second.firstIdx);
+                    auto newBestLine = _orthgLineFit(newStart, second.lastIdx);
                     first.line = newBestLine;
-                    first.startIdx = newStart;
-                    first.endIdx = second.endIdx;
-                    first.firstPoint = _scanPoints[first.startIdx];
-                    first.lastPoint = _scanPoints[first.endIdx];
+                    first.firstIdx = newStart;
+                    first.lastIdx = second.lastIdx;
+                    first.firstPoint = _scanPoints[first.firstIdx];
+                    first.lastPoint = _scanPoints[first.lastIdx];
                     _segments.erase(_segments.begin() + j);
                     j--;
                 }
@@ -403,9 +403,9 @@ void LineSegmenter::_processOverlap()
     for (int i = 0; i < ((int)_segments.size() - 1); i++)
     {
         auto& firstSeg = _segments[i];
-        int firstEnd = firstSeg.endIdx;
+        int firstEnd = firstSeg.lastIdx;
         auto& secondSeg = _segments[i + 1];
-        int secondStart = secondSeg.startIdx;
+        int secondStart = secondSeg.firstIdx;
         
         if (secondStart <= firstEnd)
         {
@@ -429,12 +429,12 @@ void LineSegmenter::_processOverlap()
         }
 
         // Refit both segments.
-        firstSeg.endIdx = firstEnd;
+        firstSeg.lastIdx = firstEnd;
         firstSeg.lastPoint = _scanPoints[firstEnd];
-        firstSeg.line = _orthgLineFit(firstSeg.startIdx, firstSeg.endIdx + 1);
-        secondSeg.startIdx = secondStart;
+        firstSeg.line = _orthgLineFit(firstSeg.firstIdx, firstSeg.lastIdx + 1);
+        secondSeg.firstIdx = secondStart;
         secondSeg.firstPoint = _scanPoints[secondStart];
-        secondSeg.line = _orthgLineFit(secondSeg.startIdx, secondSeg.endIdx + 1);
+        secondSeg.line = _orthgLineFit(secondSeg.firstIdx, secondSeg.lastIdx + 1);
     }
 }
 
