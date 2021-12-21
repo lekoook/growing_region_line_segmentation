@@ -43,7 +43,7 @@ void LineSegmenter::_extractPoints(const sensor_msgs::LaserScan& scanMsg)
     _scanPoints.clear();
     for (int i = 0; i < (int)scanMsg.ranges.size(); i++)
     {
-        if (!std::isinf(scanMsg.ranges[i]))
+        if (!std::isinf(scanMsg.ranges[i]) && (scanMsg.ranges[i] <= scanMsg.range_max))
         {
             ScanPoint pt;
             pt.polarPoint.distance = scanMsg.ranges[i];
