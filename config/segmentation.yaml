@@ -3,11 +3,11 @@ scan_topic: scan
 
 # The number of points a seed segment should contain.
 # This value should be LESSER than "segment_min_points" value.
-seed_segment_points: 10
+seed_segment_points: 6
 
 # The number of points a full line segment should contain.
 # This value should be GREATER than "seed_segment_points" value.
-segment_min_points: 6
+segment_min_points: 10
 
 # The maximum distance (metre) from a seed segment point to the seed segment line.
 point_to_line_threshold_m: 0.03

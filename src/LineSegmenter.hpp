@@ -13,6 +13,12 @@ struct PolarPoint2D
     {};
 };
 
+struct ScanPoint
+{
+    PolarPoint2D polarPoint;
+    Point cartesianPoint;
+};
+
 struct Line
 {
     double xCoeff = 0;
@@ -28,27 +34,21 @@ struct LineSegment
 {
     int startIdx;
     int endIdx;
-    Point startPoint;
-    Point endPoint;
-    PolarPoint2D startPolarPoint;
-    PolarPoint2D endPolarPoint;
+    ScanPoint startPoint;
+    ScanPoint endPoint;
     Line line;
     LineSegment() {};
     LineSegment(
         int startIdx,
         int endIdx,
-        Point startPoint, 
-        Point endPoint, 
-        PolarPoint2D startPolarPoint, 
-        PolarPoint2D endPolarPoint, 
+        ScanPoint startPoint, 
+        ScanPoint endPoint, 
         Line line) 
         : 
         startIdx(startIdx),
         endIdx(endIdx),
         startPoint(startPoint), 
         endPoint(endPoint), 
-        startPolarPoint(startPolarPoint), 
-        endPolarPoint(endPolarPoint), 
         line(line)
     {};
 };
@@ -68,20 +68,22 @@ private:
     double _updateFreq;
     double _minLen;
     bool _toCompute;
+    std::vector<ScanPoint> _scanPoints;
+    std::vector<LineSegment> _segments;
 
     void _scanCb(const sensor_msgs::LaserScanConstPtr& msg);
     void _timerCb(const ros::TimerEvent& event);
-    PolarPoint2D _getPolar(const sensor_msgs::LaserScan& scanMsg, int index);
+    void _extractPoints(const sensor_msgs::LaserScan& scanMsg);
     Point _polar2Cart(PolarPoint2D polarPoint2D);
     double _pt2PtDist2D(Point point1, Point point2);
     double _pt2LineDist2D(Point point, Line line);
     Point _getPredictedPt(double pointBearing, Line line);
-    Line _orthgLineFit(const sensor_msgs::LaserScan& scanMsg, int start, int end);
-    std::vector<LineSegment> _generateSegments(const sensor_msgs::LaserScan& scanMsg);
-    bool _generateSeed(const sensor_msgs::LaserScan& scanMsg, int start, int end, LineSegment& seed_);
-    bool _growSeed(const sensor_msgs::LaserScan& scanMsg, LineSegment& seed);
-    void _processOverlap(const sensor_msgs::LaserScan& scanMsg, std::vector<LineSegment>& segments);
-    void _generateEndpoints(std::vector<LineSegment>& segments);
+    Line _orthgLineFit(int start, int end);
+    void _generateSegments();
+    bool _generateSeed(int start, int end, LineSegment& seed_);
+    bool _growSeed(LineSegment& seed);
+    void _processOverlap();
+    void _generateEndpoints();
 
     // Visualization helpers
     int _lineId = 0;

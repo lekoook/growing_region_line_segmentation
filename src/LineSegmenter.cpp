@@ -26,9 +26,9 @@ void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
         _clearLines("seed_segments");
         _clearLines("raw_segments");
         _clearLines("processed");
-        sensor_msgs::LaserScan msgCopy = *msg;
-
-        auto segments = _generateSegments(msgCopy);
+        _extractPoints(*msg);
+        ROS_INFO_STREAM(_scanPoints.size());
+        _generateSegments();
     }
 }
 
@@ -37,9 +37,20 @@ void LineSegmenter::_timerCb(const ros::TimerEvent& event)
     _toCompute = true;
 }
 
-PolarPoint2D LineSegmenter::_getPolar(const sensor_msgs::LaserScan& scanMsg, int index)
+void LineSegmenter::_extractPoints(const sensor_msgs::LaserScan& scanMsg)
 {
-    return PolarPoint2D(scanMsg.ranges[index], scanMsg.angle_min + (index * scanMsg.angle_increment));
+    _scanPoints.clear();
+    for (int i = 0; i < (int)scanMsg.ranges.size(); i++)
+    {
+        if (!std::isinf(scanMsg.ranges[i]))
+        {
+            ScanPoint pt;
+            pt.polarPoint.distance = scanMsg.ranges[i];
+            pt.polarPoint.theta = scanMsg.angle_min + (i * scanMsg.angle_increment);
+            pt.cartesianPoint = _polar2Cart(pt.polarPoint);
+            _scanPoints.push_back(pt);
+        }
+    }
 }
 
 Point LineSegmenter::_polar2Cart(PolarPoint2D polarPoint2D)
@@ -78,7 +89,7 @@ Point LineSegmenter::_getPredictedPt(double pointBearing, Line line)
     return pt;
 }
 
-Line LineSegmenter::_orthgLineFit(const sensor_msgs::LaserScan& scanMsg, int start, int end)
+Line LineSegmenter::_orthgLineFit(int start, int end)
 {
     double sX = 0.0f, sY = 0.0f, mX = 0.0f, mY = 0.0f, sXX = 0.0, sXY = 0.0, sYY = 0.0;
     double xCoeff = 0.0f, yCoeff = 0.0f, constant = 0.0f;
@@ -87,7 +98,7 @@ Line LineSegmenter::_orthgLineFit(const sensor_msgs::LaserScan& scanMsg, int sta
     //Calculate sums of X and Y and their means.
     for (int i = start; i < end; i++)
     {
-        Point pt = _polar2Cart(_getPolar(scanMsg, i));
+        Point pt = _scanPoints[i].cartesianPoint;
         sX += pt.x;
         sY += pt.y;
         n++;
@@ -99,7 +110,7 @@ Line LineSegmenter::_orthgLineFit(const sensor_msgs::LaserScan& scanMsg, int sta
     //(components of the scatter matrix)
     for (int i = start; i < end; i++)
     {
-        Point pt = _polar2Cart(_getPolar(scanMsg, i));
+        Point pt = _scanPoints[i].cartesianPoint;
         sXX += (pt.x - mX) * (pt.x - mX);
         sXY += (pt.x - mX) * (pt.y - mY);
         sYY += (pt.y - mY) * (pt.y - mY);
@@ -147,74 +158,63 @@ Line LineSegmenter::_orthgLineFit(const sensor_msgs::LaserScan& scanMsg, int sta
     return line;
 }
 
-std::vector<LineSegment> LineSegmenter::_generateSegments(const sensor_msgs::LaserScan& scanMsg)
+void LineSegmenter::_generateSegments()
 {
+    _segments.clear();
+    if ((int)_scanPoints.size() < _segMinPoints)
+    {
+        return; // Don't bother if too little points.
+    }
+    
     int seedId = 0, fullId = 0, procId = 0;
-    std::vector<LineSegment> segments;
     // Generate seed segments and grow each one into a full line segment.
-    for (int start = 0; start < ((int)scanMsg.ranges.size() - _segMinPoints); start++)
+    for (int start = 0; start < ((int)_scanPoints.size() - _segMinPoints); start++)
     {
         int end = start + _seedSegPoints;
-        // TODO: Skip inf points for now. Assuming there is not inf points after the first point from 'start' to 'end' points.
-        bool skip = false;
-        for (int i = start; i < end; i++)
-        {
-            if (std::isinf(scanMsg.ranges[i]))
-            {
-                skip = true;
-                break;
-            }
-        }
-        if (skip)
-        {
-            continue;
-        }
 
         // Generate a possible seed segment and try to grow it.
         LineSegment seed;
-        if (_generateSeed(scanMsg, start, end, seed))
+        if (_generateSeed(start, end, seed))
         {
-            _markLine(seed.line, seed.startPoint, seed.endPoint, seedId++, "seed_segments");
+            _markLine(seed.line, seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint, seedId++, "seed_segments");
             // Grow this seed into a full line segment.
-            if (_growSeed(scanMsg, seed))
+            if (_growSeed(seed))
             {
                 start = seed.endIdx;
-                segments.push_back(seed);
-                _markLine(seed.line, seed.startPoint, seed.endPoint, fullId++, "raw_segments");
+                _segments.push_back(seed);
+                _markLine(seed.line, seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint, fullId++, "raw_segments");
             }
         }
     }
 
     // Process the overlapping segments.
-    _processOverlap(scanMsg, segments);
-    for (int i = 0; i < (int)segments.size(); i++)
+    _processOverlap();
+    for (int i = 0; i < (int)_segments.size(); i++)
     {
-        auto seg = segments[i];
+        auto seg = _segments[i];
         // Remove lines that are too short.
-        if (_pt2PtDist2D(seg.startPoint, seg.endPoint) < _minLen)
+        if (_pt2PtDist2D(seg.startPoint.cartesianPoint, seg.endPoint.cartesianPoint) < _minLen)
         {
-            segments.erase(segments.begin() + i);
+            _segments.erase(_segments.begin() + i);
         }
     }
 
     // Generate the endpoints for each line.
-    _generateEndpoints(segments);
-    for (auto seg : segments)
+    _generateEndpoints();
+    for (auto seg : _segments)
     {
-        _markLine(seg.line, seg.startPoint, seg.endPoint, procId++, "processed");
+        _markLine(seg.line, seg.startPoint.cartesianPoint, seg.endPoint.cartesianPoint, procId++, "processed");
     }
-    
-    return segments;
 }
 
-bool LineSegmenter::_generateSeed(const sensor_msgs::LaserScan& scanMsg, int start, int end, LineSegment& seed_)
+bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
 {
-    Line bestLine = _orthgLineFit(scanMsg, start, end);
+    Line bestLine = _orthgLineFit(start, end); // TODO:
     bool foundSeed = true;
     for (int k = start; k < end; k++)
     {
-        Point pt = _polar2Cart(_getPolar(scanMsg, k));
-        Point pPt = _getPredictedPt(scanMsg.angle_min + (k * scanMsg.angle_increment), bestLine);
+        Point pt = _scanPoints[k].cartesianPoint;
+        Point pPt = _getPredictedPt(_scanPoints[k].polarPoint.theta, bestLine);
         double pt2PtDist = _pt2PtDist2D(pt, pPt);
         double pt2LineDist = _pt2LineDist2D(pt, bestLine);
 
@@ -232,16 +232,12 @@ bool LineSegmenter::_generateSeed(const sensor_msgs::LaserScan& scanMsg, int sta
     }
     if (foundSeed)
     {
-        PolarPoint2D startPolar = _getPolar(scanMsg, start);
-        PolarPoint2D endPolar = _getPolar(scanMsg, end - 1);
-        Point startPt = _polar2Cart(startPolar);
-        Point endPt = _polar2Cart(endPolar);
-        seed_ = LineSegment(start, end - 1, startPt, endPt, startPolar, endPolar, bestLine);
+        seed_ = LineSegment(start, end - 1, _scanPoints[start], _scanPoints[end - 1], bestLine);
     }
     return foundSeed;
 }
 
-bool LineSegmenter::_growSeed(const sensor_msgs::LaserScan& scanMsg, LineSegment& seed)
+bool LineSegmenter::_growSeed(LineSegment& seed)
 {
     int pb = seed.startIdx;
     int pf = seed.endIdx + 1;
@@ -249,16 +245,16 @@ bool LineSegmenter::_growSeed(const sensor_msgs::LaserScan& scanMsg, LineSegment
     // TODO: Refit and grow both ends of the segment together in a one iteration instead of two.
 
     // Refit and grow the end.
-    while (pf < scanMsg.ranges.size())
+    while (pf < (int)_scanPoints.size())
     {
-        if (std::isinf(scanMsg.ranges[pf]) || (_pt2LineDist2D(_polar2Cart(_getPolar(scanMsg, pf)), seed.line) >= _ptToLineThresh))
+        if (_pt2LineDist2D(_scanPoints[pf].cartesianPoint, seed.line) >= _ptToLineThresh)
         {
             break;
         }
         else
         {
             // Refit the current segment to the new point.
-            auto newLine = _orthgLineFit(scanMsg, pb, pf);
+            auto newLine = _orthgLineFit(pb, pf);
             seed.line = newLine;
             pf++;
         }
@@ -266,30 +262,28 @@ bool LineSegmenter::_growSeed(const sensor_msgs::LaserScan& scanMsg, LineSegment
     int o = pf;
     pf--; // Reset pf back to the largest possible index value.
     seed.endIdx = pf;
-    seed.endPolarPoint = _getPolar(scanMsg, pf);
-    seed.endPoint = _polar2Cart(seed.endPolarPoint);
+    seed.endPoint = _scanPoints[pf];
 
     // Refit and grow the start.
     pb = pb - 1;
     while (pb >= 0)
     {
-        if (std::isinf(scanMsg.ranges[pb]) || (_pt2LineDist2D(_polar2Cart(_getPolar(scanMsg, pb)), seed.line) >= _ptToLineThresh))
+        if (_pt2LineDist2D(_scanPoints[pb].cartesianPoint, seed.line) >= _ptToLineThresh)
         {
             break;
         }
         else
         {
-            auto newLine = _orthgLineFit(scanMsg, pb, pf);
+            auto newLine = _orthgLineFit(pb, pf);
             seed.line = newLine;
             pb--;
         }
     }
     pb++; // Reset pb back to the lowest possible index value.
     seed.startIdx = pb;
-    seed.startPolarPoint = _getPolar(scanMsg, pb);
-    seed.startPoint = _polar2Cart(seed.startPolarPoint);
+    seed.startPoint = _scanPoints[pb];
 
-    double lineLen = _pt2PtDist2D(seed.startPoint, seed.endPoint);
+    double lineLen = _pt2PtDist2D(seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint);
     int linePoints = pf - pb + 1;
     if (lineLen >= _minLen && linePoints >= _segMinPoints)
     {
@@ -298,15 +292,15 @@ bool LineSegmenter::_growSeed(const sensor_msgs::LaserScan& scanMsg, LineSegment
     return false;
 }
 
-void LineSegmenter::_processOverlap(const sensor_msgs::LaserScan& scanMsg, std::vector<LineSegment>& segments)
+void LineSegmenter::_processOverlap()
 {
     // Refit all the collinear segments
-    for (int i = 0; i < ((int)segments.size() - 1); i++)
+    for (int i = 0; i < ((int)_segments.size() - 1); i++)
     {
-        auto& first = segments[i];
-        for (int j = i + 1; j < segments.size(); j++)
+        auto& first = _segments[i];
+        for (int j = i + 1; j < _segments.size(); j++)
         {
-            auto second = segments[j];
+            auto second = _segments[j];
             if (first.endIdx >= second.startIdx)
             {
                 double firstTheta = atan2(-first.line.xCoeff, first.line.yCoeff);
@@ -316,15 +310,13 @@ void LineSegmenter::_processOverlap(const sensor_msgs::LaserScan& scanMsg, std::
                 if (deltaTheta < _colThresh)
                 {
                     int newStart = std::min<double>(first.startIdx, second.startIdx);
-                    auto newBestLine = _orthgLineFit(scanMsg, newStart, second.endIdx);
+                    auto newBestLine = _orthgLineFit(newStart, second.endIdx);
                     first.line = newBestLine;
                     first.startIdx = newStart;
                     first.endIdx = second.endIdx;
-                    first.startPolarPoint = _getPolar(scanMsg, first.startIdx);
-                    first.endPolarPoint = _getPolar(scanMsg, first.endIdx);
-                    first.startPoint = _polar2Cart(first.startPolarPoint);
-                    first.endPoint = _polar2Cart(first.endPolarPoint);
-                    segments.erase(segments.begin() + j);
+                    first.startPoint = _scanPoints[first.startIdx];
+                    first.endPoint = _scanPoints[first.endIdx];
+                    _segments.erase(_segments.begin() + j);
                     j--;
                 }
             }
@@ -332,11 +324,11 @@ void LineSegmenter::_processOverlap(const sensor_msgs::LaserScan& scanMsg, std::
     }
 
     // Properly separate non-collinear segments.
-    for (int i = 0; i < ((int)segments.size() - 1); i++)
+    for (int i = 0; i < ((int)_segments.size() - 1); i++)
     {
-        auto& firstSeg = segments[i];
+        auto& firstSeg = _segments[i];
         int firstEnd = firstSeg.endIdx;
-        auto& secondSeg = segments[i + 1];
+        auto& secondSeg = _segments[i + 1];
         int secondStart = secondSeg.startIdx;
         
         if (secondStart <= firstEnd)
@@ -344,7 +336,7 @@ void LineSegmenter::_processOverlap(const sensor_msgs::LaserScan& scanMsg, std::
             int k = secondStart;
             for (; k <= firstEnd; k++)
             {
-                Point ptK = _polar2Cart(_getPolar(scanMsg, k));
+                Point ptK = _scanPoints[k].cartesianPoint;
                 double dik = _pt2LineDist2D(ptK, firstSeg.line);
                 double djk = _pt2LineDist2D(ptK, secondSeg.line);
                 if (dik > djk)
@@ -362,19 +354,17 @@ void LineSegmenter::_processOverlap(const sensor_msgs::LaserScan& scanMsg, std::
 
         // Refit both segments.
         firstSeg.endIdx = firstEnd;
-        firstSeg.endPolarPoint = _getPolar(scanMsg, firstEnd);
-        firstSeg.endPoint = _polar2Cart(firstSeg.endPolarPoint);
-        firstSeg.line = _orthgLineFit(scanMsg, firstSeg.startIdx, firstSeg.endIdx + 1);
+        firstSeg.endPoint = _scanPoints[firstEnd];
+        firstSeg.line = _orthgLineFit(firstSeg.startIdx, firstSeg.endIdx + 1);
         secondSeg.startIdx = secondStart;
-        secondSeg.startPolarPoint = _getPolar(scanMsg, secondStart);
-        secondSeg.startPoint = _polar2Cart(secondSeg.startPolarPoint);
-        secondSeg.line = _orthgLineFit(scanMsg, secondSeg.startIdx, secondSeg.endIdx + 1);
+        secondSeg.startPoint = _scanPoints[secondStart];
+        secondSeg.line = _orthgLineFit(secondSeg.startIdx, secondSeg.endIdx + 1);
     }
 }
 
-void LineSegmenter::_generateEndpoints(std::vector<LineSegment>& segments)
+void LineSegmenter::_generateEndpoints()
 {
-    for (auto& seg : segments)
+    for (auto& seg : _segments)
     {
         double xC = seg.line.xCoeff;
         double yC = seg.line.yCoeff;
@@ -386,15 +376,15 @@ void LineSegmenter::_generateEndpoints(std::vector<LineSegment>& segments)
         double yCc = yC * c;
         double denom = (xC * xC) + (yC * yC);
         // Calculate new first point.
-        double fX = ((yC2 * seg.startPoint.x) - (xCyC * seg.startPoint.y) - (xCc)) / denom;
-        double fY = ((xC2 * seg.startPoint.y) - (xCyC * seg.startPoint.x) - (yCc)) / denom;
-        seg.startPoint.x = fX;
-        seg.startPoint.y = fY;
+        double fX = ((yC2 * seg.startPoint.cartesianPoint.x) - (xCyC * seg.startPoint.cartesianPoint.y) - (xCc)) / denom;
+        double fY = ((xC2 * seg.startPoint.cartesianPoint.y) - (xCyC * seg.startPoint.cartesianPoint.x) - (yCc)) / denom;
+        seg.startPoint.cartesianPoint.x = fX;
+        seg.startPoint.cartesianPoint.y = fY;
         // Calculate new last point.
-        double lX = ((yC2 * seg.endPoint.x) - (xCyC * seg.endPoint.y) - (xCc)) / denom;
-        double lY = ((xC2 * seg.endPoint.y) - (xCyC * seg.endPoint.x) - (yCc)) / denom;
-        seg.endPoint.x = lX;
-        seg.endPoint.y = lY;
+        double lX = ((yC2 * seg.endPoint.cartesianPoint.x) - (xCyC * seg.endPoint.cartesianPoint.y) - (xCc)) / denom;
+        double lY = ((xC2 * seg.endPoint.cartesianPoint.y) - (xCyC * seg.endPoint.cartesianPoint.x) - (yCc)) / denom;
+        seg.endPoint.cartesianPoint.x = lX;
+        seg.endPoint.cartesianPoint.y = lY;
     }
 }
 
