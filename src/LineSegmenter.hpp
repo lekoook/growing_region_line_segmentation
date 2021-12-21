@@ -34,8 +34,8 @@ struct LineSegment
 {
     int startIdx;
     int endIdx;
-    ScanPoint startPoint;
-    ScanPoint endPoint;
+    ScanPoint firstPoint;
+    ScanPoint lastPoint;
     Line line;
     LineSegment() {};
     LineSegment(
@@ -47,8 +47,8 @@ struct LineSegment
         : 
         startIdx(startIdx),
         endIdx(endIdx),
-        startPoint(startPoint), 
-        endPoint(endPoint), 
+        firstPoint(startPoint), 
+        lastPoint(endPoint), 
         line(line)
     {};
 };

@@ -223,13 +223,13 @@ void LineSegmenter::_generateSegments()
         LineSegment seed;
         if (_generateSeed(start, end, seed))
         {
-            _markLine(seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint, seedId++, "seed_segments");
+            _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, seedId++, "seed_segments");
             // Grow this seed into a full line segment.
             if (_growSeed(seed))
             {
                 start = seed.endIdx;
                 _segments.push_back(seed);
-                _markLine(seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint, fullId++, "raw_segments");
+                _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, fullId++, "raw_segments");
             }
         }
     }
@@ -240,7 +240,7 @@ void LineSegmenter::_generateSegments()
     {
         auto seg = _segments[i];
         // Remove lines that are too short.
-        if (_pt2PtDist2D(seg.startPoint.cartesianPoint, seg.endPoint.cartesianPoint) < _minLen)
+        if (_pt2PtDist2D(seg.firstPoint.cartesianPoint, seg.lastPoint.cartesianPoint) < _minLen)
         {
             _segments.erase(_segments.begin() + i);
         }
@@ -250,7 +250,7 @@ void LineSegmenter::_generateSegments()
     _generateEndpoints();
     for (auto seg : _segments)
     {
-        _markLine(seg.startPoint.cartesianPoint, seg.endPoint.cartesianPoint, procId++, "processed");
+        _markLine(seg.firstPoint.cartesianPoint, seg.lastPoint.cartesianPoint, procId++, "processed");
     }
 }
 
@@ -338,7 +338,7 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
     int o = pf;
     pf--; // Reset pf back to the largest possible index value.
     seed.endIdx = pf;
-    seed.endPoint = _scanPoints[pf];
+    seed.lastPoint = _scanPoints[pf];
 
     // Refit and grow the start.
     pb = pb - 1;
@@ -357,9 +357,9 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
     }
     pb++; // Reset pb back to the lowest possible index value.
     seed.startIdx = pb;
-    seed.startPoint = _scanPoints[pb];
+    seed.firstPoint = _scanPoints[pb];
 
-    double lineLen = _pt2PtDist2D(seed.startPoint.cartesianPoint, seed.endPoint.cartesianPoint);
+    double lineLen = _pt2PtDist2D(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint);
     int linePoints = pf - pb + 1;
     if (lineLen >= _minLen && linePoints >= _segMinPoints)
     {
@@ -390,8 +390,8 @@ void LineSegmenter::_processOverlap()
                     first.line = newBestLine;
                     first.startIdx = newStart;
                     first.endIdx = second.endIdx;
-                    first.startPoint = _scanPoints[first.startIdx];
-                    first.endPoint = _scanPoints[first.endIdx];
+                    first.firstPoint = _scanPoints[first.startIdx];
+                    first.lastPoint = _scanPoints[first.endIdx];
                     _segments.erase(_segments.begin() + j);
                     j--;
                 }
@@ -430,10 +430,10 @@ void LineSegmenter::_processOverlap()
 
         // Refit both segments.
         firstSeg.endIdx = firstEnd;
-        firstSeg.endPoint = _scanPoints[firstEnd];
+        firstSeg.lastPoint = _scanPoints[firstEnd];
         firstSeg.line = _orthgLineFit(firstSeg.startIdx, firstSeg.endIdx + 1);
         secondSeg.startIdx = secondStart;
-        secondSeg.startPoint = _scanPoints[secondStart];
+        secondSeg.firstPoint = _scanPoints[secondStart];
         secondSeg.line = _orthgLineFit(secondSeg.startIdx, secondSeg.endIdx + 1);
     }
 }
@@ -452,15 +452,15 @@ void LineSegmenter::_generateEndpoints()
         double yCc = yC * c;
         double denom = (xC * xC) + (yC * yC);
         // Calculate new first point.
-        double fX = ((yC2 * seg.startPoint.cartesianPoint.x) - (xCyC * seg.startPoint.cartesianPoint.y) - (xCc)) / denom;
-        double fY = ((xC2 * seg.startPoint.cartesianPoint.y) - (xCyC * seg.startPoint.cartesianPoint.x) - (yCc)) / denom;
-        seg.startPoint.cartesianPoint.x = fX;
-        seg.startPoint.cartesianPoint.y = fY;
+        double fX = ((yC2 * seg.firstPoint.cartesianPoint.x) - (xCyC * seg.firstPoint.cartesianPoint.y) - (xCc)) / denom;
+        double fY = ((xC2 * seg.firstPoint.cartesianPoint.y) - (xCyC * seg.firstPoint.cartesianPoint.x) - (yCc)) / denom;
+        seg.firstPoint.cartesianPoint.x = fX;
+        seg.firstPoint.cartesianPoint.y = fY;
         // Calculate new last point.
-        double lX = ((yC2 * seg.endPoint.cartesianPoint.x) - (xCyC * seg.endPoint.cartesianPoint.y) - (xCc)) / denom;
-        double lY = ((xC2 * seg.endPoint.cartesianPoint.y) - (xCyC * seg.endPoint.cartesianPoint.x) - (yCc)) / denom;
-        seg.endPoint.cartesianPoint.x = lX;
-        seg.endPoint.cartesianPoint.y = lY;
+        double lX = ((yC2 * seg.lastPoint.cartesianPoint.x) - (xCyC * seg.lastPoint.cartesianPoint.y) - (xCc)) / denom;
+        double lY = ((xC2 * seg.lastPoint.cartesianPoint.y) - (xCyC * seg.lastPoint.cartesianPoint.x) - (yCc)) / denom;
+        seg.lastPoint.cartesianPoint.x = lX;
+        seg.lastPoint.cartesianPoint.y = lY;
     }
 }
 
