@@ -86,10 +86,13 @@ private:
     void _processOverlap();
     void _generateEndpoints();
 
+    std::vector<ScanPoint> _filterFront();
+
     // Visualization helpers
     int _lineId = 0;
-    void _markLine(Line line, Point pt1, Point pt2, int id=-1, std::string ns="lines");
+    void _markLine(Point pt1, Point pt2, int id=-1, std::string ns="lines");
     void _markLine(Line line, double x, int id=-1, std::string ns="lines");
+    void _markLine(std::vector<ScanPoint> _scanPoints);
     void _clearLines(std::string ns="lines");
 
 public:
