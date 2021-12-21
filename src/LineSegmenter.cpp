@@ -8,6 +8,7 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     ros::param::param<int>("~seed_segment_points", _seedSegPoints, 10);
     ros::param::param<int>("~segment_min_points", _segMinPoints, 20);
     ros::param::param<double>("~point_to_line_threshold_m", _ptToLineThresh, 0.01f);
+    ros::param::param<double>("~growth_outlier_threshold_m", _outlierThresh, 0.1f);
     ros::param::param<double>("~point_to_point_threshold_m", _ptToPtThresh, 0.1f);
     ros::param::param<double>("~collinear_threshold_rad", _colThresh, 0.1f);
     ros::param::param<double>("~update_frequency", _updateFreq, 10.0f);
@@ -32,8 +33,8 @@ void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
         ROS_INFO_STREAM(_scanPoints.size());
         _generateSegments();
 
-        auto filtered = _filterFront();
-        _markLine(filtered);
+        // auto filtered = _filterFront();
+        // _markLine(filtered);
     }
 }
 
@@ -123,6 +124,63 @@ double LineSegmenter::_pt2LineDist2D(Point point, Line line)
     return numerator / denominator;
 }
 
+double LineSegmenter::_pt2LineSegmentDist2D(Point point, LineSegment lineSegment)
+{
+    double x = point.x;
+    double y = point.y;
+    lineSegment.generateEndpoints();
+    double x1 = lineSegment.startPoint.x;
+    double y1 = lineSegment.startPoint.y;
+    double x2 = lineSegment.endPoint.x;
+    double y2 = lineSegment.endPoint.y;
+    double A = x - x1;
+    double B = y - y1;
+    double C = x2 - x1;
+    double D = y2 - y1;
+
+    double dot = A * C + B * D;
+    double len_sq = C * C + D * D;
+    int param = -1;
+    if (len_sq != 0) //in case of 0 length line
+    {
+        param = dot / len_sq;
+    }
+
+    double xx, yy;
+
+    if (param < 0)
+    {
+        xx = x1;
+        yy = y1;
+    }
+    else if (param > 1)
+    {
+        xx = x2;
+        yy = y2;
+    }
+    else
+    {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+
+    double dx = x - xx;
+    double dy = y - yy;
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+std::vector<bool> LineSegmenter::_orOutlierMask(std::vector<bool>& first, std::vector<bool>& second)
+{
+    size_t cap = std::max(first.size(), second.size());
+    size_t less = std::min(first.size(), second.size());
+    std::vector<bool> comb(cap, false);
+    for (int i = 0; i < (int)less; i++)
+    {
+        comb[i] = (first[i] || second[i]);
+    }
+    return comb;
+}
+
 Point LineSegmenter::_getPredictedPt(double pointBearing, Line line)
 {
     double cosBear = cos(pointBearing);
@@ -136,7 +194,7 @@ Point LineSegmenter::_getPredictedPt(double pointBearing, Line line)
     return pt;
 }
 
-Line LineSegmenter::_orthgLineFit(int start, int end)
+Line LineSegmenter::_orthgLineFit(int start, int end, std::vector<bool>& outlierMask)
 {
     double sX = 0.0f, sY = 0.0f, mX = 0.0f, mY = 0.0f, sXX = 0.0, sXY = 0.0, sYY = 0.0;
     double xCoeff = 0.0f, yCoeff = 0.0f, constant = 0.0f;
@@ -145,10 +203,13 @@ Line LineSegmenter::_orthgLineFit(int start, int end)
     //Calculate sums of X and Y and their means.
     for (int i = start; i < end; i++)
     {
-        Point pt = _scanPoints[i].cartesianPoint;
-        sX += pt.x;
-        sY += pt.y;
-        n++;
+        if (!outlierMask[i])
+        {
+            Point pt = _scanPoints[i].cartesianPoint;
+            sX += pt.x;
+            sY += pt.y;
+            n++;
+        }
     }
     mX = sX / (double)n;
     mY = sY / (double)n;
@@ -157,10 +218,13 @@ Line LineSegmenter::_orthgLineFit(int start, int end)
     //(components of the scatter matrix)
     for (int i = start; i < end; i++)
     {
-        Point pt = _scanPoints[i].cartesianPoint;
-        sXX += (pt.x - mX) * (pt.x - mX);
-        sXY += (pt.x - mX) * (pt.y - mY);
-        sYY += (pt.y - mY) * (pt.y - mY);
+        if (!outlierMask[i])
+        {
+            Point pt = _scanPoints[i].cartesianPoint;
+            sXX += (pt.x - mX) * (pt.x - mX);
+            sXY += (pt.x - mX) * (pt.y - mY);
+            sYY += (pt.y - mY) * (pt.y - mY);
+        }
     }
 
     // Find line equation coefficients and constant.
@@ -221,6 +285,7 @@ void LineSegmenter::_generateSegments()
 
         // Generate a possible seed segment and try to grow it.
         LineSegment seed;
+        seed.outlierMask = std::vector<bool>(_scanPoints.size(), false);
         if (_generateSeed(start, end, seed))
         {
             _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, seedId++, "seed_segments");
@@ -256,40 +321,11 @@ void LineSegmenter::_generateSegments()
 
 bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
 {
-    static int id = 0;
-    Line bestLine = _orthgLineFit(start, end);
+    Line bestLine = _orthgLineFit(start, end, seed_.outlierMask);
     bool foundSeed = true;
-    Point prevPt = _scanPoints[start].cartesianPoint;
-    int tooFarCnt = 0;
     for (int k = start; k < end; k++)
     {
         Point pt = _scanPoints[k].cartesianPoint;
-
-        if (_pt2PtDist2D(pt, prevPt) > 0.5)
-        {
-            tooFarCnt++;
-            end++;
-            if (end >= (int)_scanPoints.size())
-            {
-                end = (int)_scanPoints.size();
-            }
-            Point zero;
-            _markLine(zero, _scanPoints[k].cartesianPoint, k, "too_far");
-
-            if (tooFarCnt >= 20)
-            {
-                ROS_INFO_STREAM("Too far exceeded");
-                foundSeed = false;
-                break;
-            }
-            continue;
-        }
-        else
-        {
-            prevPt = pt;
-            tooFarCnt = 0;
-        }
-        
         Point pPt = _getPredictedPt(_scanPoints[k].polarPoint.theta, bestLine);
         double pt2PtDist = _pt2PtDist2D(pt, pPt);
         double pt2LineDist = _pt2LineDist2D(pt, bestLine);
@@ -308,7 +344,12 @@ bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
     }
     if (foundSeed)
     {
-        seed_ = LineSegment(start, end - 1, _scanPoints[start], _scanPoints[end - 1], bestLine);
+        seed_.firstIdx = start;
+        seed_.lastIdx = end-1;
+        seed_.firstPoint = _scanPoints[start];
+        seed_.lastPoint = _scanPoints[end - 1];
+        seed_.line = bestLine;
+        seed_.generateEndpoints();
     }
     return foundSeed;
 }
@@ -316,51 +357,58 @@ bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
 bool LineSegmenter::_growSeed(LineSegment& seed)
 {
     int pb = seed.firstIdx;
-    int pf = seed.lastIdx + 1;
+    int pf = seed.lastIdx;
+    int outlierCnt = 0;
 
     // TODO: Refit and grow both ends of the segment together in a one iteration instead of two.
 
     // Refit and grow the end.
-    while (pf < (int)_scanPoints.size())
+    pf = pf + 1;
+    while (pf < (int)_scanPoints.size() && outlierCnt < 5)
     {
-        if (_pt2LineDist2D(_scanPoints[pf].cartesianPoint, seed.line) >= _ptToLineThresh)
+        if (_pt2LineSegmentDist2D(_scanPoints[pf].cartesianPoint, seed) > _outlierThresh)
         {
-            break;
+            seed.outlierMask[pf] = true;
+            outlierCnt++;
         }
         else
         {
             // Refit the current segment to the new point.
-            auto newLine = _orthgLineFit(pb, pf);
+            auto newLine = _orthgLineFit(pb, pf, seed.outlierMask);
             seed.line = newLine;
-            pf++;
+            seed.lastIdx = pf;
+            seed.lastPoint = _scanPoints[pf];
+            seed.generateEndpoints();
+            outlierCnt = 0;
         }
+        pf++;
     }
-    int o = pf;
-    pf--; // Reset pf back to the largest possible index value.
-    seed.lastIdx = pf;
-    seed.lastPoint = _scanPoints[pf];
+
+    outlierCnt = 0;
 
     // Refit and grow the start.
     pb = pb - 1;
-    while (pb >= 0)
+    while (pb >= 0 && outlierCnt < 5)
     {
-        if (_pt2LineDist2D(_scanPoints[pb].cartesianPoint, seed.line) >= _ptToLineThresh)
+        if (_pt2LineSegmentDist2D(_scanPoints[pb].cartesianPoint, seed) > _outlierThresh)
         {
-            break;
+            seed.outlierMask[pb] = true;
+            outlierCnt++;
         }
         else
         {
-            auto newLine = _orthgLineFit(pb, pf);
+            auto newLine = _orthgLineFit(pb, pf, seed.outlierMask);
             seed.line = newLine;
-            pb--;
+            seed.firstIdx = pb;
+            seed.firstPoint = _scanPoints[pb];
+            seed.generateEndpoints();
+            outlierCnt = 0;
         }
+        pb--;
     }
-    pb++; // Reset pb back to the lowest possible index value.
-    seed.firstIdx = pb;
-    seed.firstPoint = _scanPoints[pb];
 
     double lineLen = _pt2PtDist2D(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint);
-    int linePoints = pf - pb + 1;
+    int linePoints = seed.lastIdx - seed.firstIdx + 1;
     if (lineLen >= _minLen && linePoints >= _segMinPoints)
     {
         return true;
@@ -386,7 +434,9 @@ void LineSegmenter::_processOverlap()
                 if (deltaTheta < _colThresh)
                 {
                     int newStart = std::min<double>(first.firstIdx, second.firstIdx);
-                    auto newBestLine = _orthgLineFit(newStart, second.lastIdx);
+                    auto outlier = _orOutlierMask(first.outlierMask, second.outlierMask);
+                    auto newBestLine = _orthgLineFit(newStart, second.lastIdx, outlier);
+                    first.outlierMask = outlier;
                     first.line = newBestLine;
                     first.firstIdx = newStart;
                     first.lastIdx = second.lastIdx;
@@ -431,10 +481,10 @@ void LineSegmenter::_processOverlap()
         // Refit both segments.
         firstSeg.lastIdx = firstEnd;
         firstSeg.lastPoint = _scanPoints[firstEnd];
-        firstSeg.line = _orthgLineFit(firstSeg.firstIdx, firstSeg.lastIdx + 1);
+        firstSeg.line = _orthgLineFit(firstSeg.firstIdx, firstSeg.lastIdx + 1, firstSeg.outlierMask);
         secondSeg.firstIdx = secondStart;
         secondSeg.firstPoint = _scanPoints[secondStart];
-        secondSeg.line = _orthgLineFit(secondSeg.firstIdx, secondSeg.lastIdx + 1);
+        secondSeg.line = _orthgLineFit(secondSeg.firstIdx, secondSeg.lastIdx + 1, secondSeg.outlierMask);
     }
 }
 

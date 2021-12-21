@@ -39,19 +39,21 @@ struct LineSegment
     Point startPoint;
     Point endPoint;
     Line line;
-    LineSegment() {};
+    std::vector<bool> outlierMask;
+    LineSegment() : outlierMask(std::vector<bool>(false)) {};
     LineSegment(
         int startIdx,
         int lastIdx,
-        ScanPoint startPoint, 
-        ScanPoint endPoint, 
+        ScanPoint firstPoint, 
+        ScanPoint lastPoint, 
         Line line) 
         : 
         firstIdx(startIdx),
         lastIdx(lastIdx),
-        firstPoint(startPoint), 
-        lastPoint(endPoint), 
-        line(line)
+        firstPoint(firstPoint), 
+        lastPoint(lastPoint), 
+        line(line),
+        outlierMask(std::vector<bool>(false))
     {};
     void generateEndpoints()
     {
@@ -87,6 +89,7 @@ private:
     int _seedSegPoints;
     int _segMinPoints;
     double _ptToLineThresh;
+    double _outlierThresh;
     double _ptToPtThresh;
     double _colThresh;
     double _updateFreq;
@@ -102,8 +105,10 @@ private:
     Point _polar2Cart(PolarPoint2D polarPoint2D);
     double _pt2PtDist2D(Point point1, Point point2);
     double _pt2LineDist2D(Point point, Line line);
+    double _pt2LineSegmentDist2D(Point point, LineSegment lineSegment);
+    std::vector<bool> _orOutlierMask(std::vector<bool>& first, std::vector<bool>& second);
     Point _getPredictedPt(double pointBearing, Line line);
-    Line _orthgLineFit(int start, int end);
+    Line _orthgLineFit(int start, int end, std::vector<bool>& outlierMask);
     void _generateSegments();
     bool _generateSeed(int start, int end, LineSegment& seed_);
     bool _growSeed(LineSegment& seed);

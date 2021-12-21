@@ -12,6 +12,9 @@ segment_min_points: 10
 # The maximum distance (metre) from a seed segment point to the seed segment line.
 point_to_line_threshold_m: 0.03
 
+# The maximum distance (metre) to consider a data point being an outlier during region growing.
+growth_outlier_threshold_m: 0.03
+
 # The maximum distance (metre) from a seed segment point to the predicted point on the seed segment.
 point_to_point_threshold_m: 0.1
 
