@@ -36,6 +36,8 @@ struct LineSegment
     int lastIdx;
     ScanPoint firstPoint;
     ScanPoint lastPoint;
+    Point startPoint;
+    Point endPoint;
     Line line;
     LineSegment() {};
     LineSegment(
@@ -51,6 +53,28 @@ struct LineSegment
         lastPoint(endPoint), 
         line(line)
     {};
+    void generateEndpoints()
+    {
+        double xC = line.xCoeff;
+        double yC = line.yCoeff;
+        double c = line.constant;
+        double xC2 = xC * xC;
+        double yC2 = yC * yC;
+        double xCyC = xC * yC;
+        double xCc = xC * c;
+        double yCc = yC * c;
+        double denom = (xC * xC) + (yC * yC);
+        // Calculate start point of segment.
+        double fX = ((yC2 * firstPoint.cartesianPoint.x) - (xCyC * firstPoint.cartesianPoint.y) - (xCc)) / denom;
+        double fY = ((xC2 * firstPoint.cartesianPoint.y) - (xCyC * firstPoint.cartesianPoint.x) - (yCc)) / denom;
+        startPoint.x = fX;
+        startPoint.y = fY;
+        // Calculate end point of segment.
+        double lX = ((yC2 * lastPoint.cartesianPoint.x) - (xCyC * lastPoint.cartesianPoint.y) - (xCc)) / denom;
+        double lY = ((xC2 * lastPoint.cartesianPoint.y) - (xCyC * lastPoint.cartesianPoint.x) - (yCc)) / denom;
+        endPoint.x = lX;
+        endPoint.y = lY;
+    };
 };
 
 class LineSegmenter

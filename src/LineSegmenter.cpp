@@ -442,25 +442,7 @@ void LineSegmenter::_generateEndpoints()
 {
     for (auto& seg : _segments)
     {
-        double xC = seg.line.xCoeff;
-        double yC = seg.line.yCoeff;
-        double c = seg.line.constant;
-        double xC2 = xC * xC;
-        double yC2 = yC * yC;
-        double xCyC = xC * yC;
-        double xCc = xC * c;
-        double yCc = yC * c;
-        double denom = (xC * xC) + (yC * yC);
-        // Calculate new first point.
-        double fX = ((yC2 * seg.firstPoint.cartesianPoint.x) - (xCyC * seg.firstPoint.cartesianPoint.y) - (xCc)) / denom;
-        double fY = ((xC2 * seg.firstPoint.cartesianPoint.y) - (xCyC * seg.firstPoint.cartesianPoint.x) - (yCc)) / denom;
-        seg.firstPoint.cartesianPoint.x = fX;
-        seg.firstPoint.cartesianPoint.y = fY;
-        // Calculate new last point.
-        double lX = ((yC2 * seg.lastPoint.cartesianPoint.x) - (xCyC * seg.lastPoint.cartesianPoint.y) - (xCc)) / denom;
-        double lY = ((xC2 * seg.lastPoint.cartesianPoint.y) - (xCyC * seg.lastPoint.cartesianPoint.x) - (yCc)) / denom;
-        seg.lastPoint.cartesianPoint.x = lX;
-        seg.lastPoint.cartesianPoint.y = lY;
+        seg.generateEndpoints();
     }
 }
 
