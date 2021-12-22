@@ -93,6 +93,7 @@ private:
     double _outlierThresh;
     double _ptToPtThresh;
     double _colThresh;
+    double _colDistThresh;
     double _updateFreq;
     double _minLen;
     double _maxLen;

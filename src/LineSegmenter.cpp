@@ -12,6 +12,7 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     ros::param::param<int>("~growth_outlier_max_count", _outlierMaxCount, 3);
     ros::param::param<double>("~point_to_point_threshold_m", _ptToPtThresh, 0.1f);
     ros::param::param<double>("~collinear_threshold_rad", _colThresh, 0.1f);
+    ros::param::param<double>("~collinear_point_segment_threshold_m", _colDistThresh, 0.1f);
     ros::param::param<double>("~update_frequency", _updateFreq, 10.0f);
     ros::param::param<double>("~min_line_length_m", _minLen, 0.1f);
     ros::param::param<double>("~max_line_length_m", _maxLen, 3.0f);
@@ -283,9 +284,9 @@ bool LineSegmenter::_collinearOverlap(const LineSegment& first, const LineSegmen
     */
     double pointPos = 0.0f;
     double dist1 = _pt2LineSegmentDist2D(first.endPoint, second, pointPos);
-    bool pt1 = (dist1 < 0.1 && (pointPos >=0) && (pointPos <=1));
+    bool pt1 = (dist1 < _colDistThresh && (pointPos >=0) && (pointPos <=1));
     double dist2 = _pt2LineSegmentDist2D(first.startPoint, second, pointPos);
-    bool pt2 = (dist2 < 0.1 && (pointPos >=0) && (pointPos <=1));
+    bool pt2 = (dist2 < _colDistThresh && (pointPos >=0) && (pointPos <=1));
     return pt1 || pt2;
 }
 

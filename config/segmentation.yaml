@@ -25,6 +25,10 @@ growth_outlier_max_count: 5
 # The maximum angle (rad) difference between two segments to consider them collinear.
 collinear_threshold_rad: 0.1
 
+# The maximum distance of the shortest distance between an endpoint of one segment to the other segment which are
+# are collinear.
+collinear_point_segment_threshold_m: 0.1
+
 # The frequency at which to compute the lines and publish.
 update_frequency: 10.0
 
