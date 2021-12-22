@@ -95,6 +95,8 @@ private:
     double _colThresh;
     double _updateFreq;
     double _minLen;
+    double _maxLen;
+    double _searchRadius;
     bool _toCompute;
     std::string _laserFrame;
     std::vector<ScanPoint> _scanPoints;

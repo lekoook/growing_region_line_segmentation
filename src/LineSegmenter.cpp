@@ -13,7 +13,18 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     ros::param::param<double>("~point_to_point_threshold_m", _ptToPtThresh, 0.1f);
     ros::param::param<double>("~collinear_threshold_rad", _colThresh, 0.1f);
     ros::param::param<double>("~update_frequency", _updateFreq, 10.0f);
-    ros::param::param<double>("~min_line_length_m", _minLen, 1.0f);
+    ros::param::param<double>("~min_line_length_m", _minLen, 0.1f);
+    ros::param::param<double>("~max_line_length_m", _maxLen, 3.0f);
+    ros::param::param<double>("~search_radius_m", _searchRadius, 3.0f);
+
+    if (_maxLen <= 0)
+    {
+        _maxLen = std::numeric_limits<double>::infinity();
+    }
+    if (_searchRadius <= 0)
+    {
+        _searchRadius = std::numeric_limits<double>::infinity();
+    }
     
     _lineMarkerPub = _nh.advertise<visualization_msgs::Marker>("line_marker", 0);
     _scanSub = _nh.subscribe(scanTopic, 1, &LineSegmenter::_scanCb, this);
@@ -25,24 +36,9 @@ void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
     if (_toCompute)
     {
         _toCompute = false;
-        _clearLines();
         _extractPoints(*msg);
         _generateSegments();
     }
-}
-
-std::vector<ScanPoint> LineSegmenter::_filterFront()
-{
-    std::vector<ScanPoint> points;
-    for (int i = 0; i < (int)_scanPoints.size(); i++)
-    {
-        auto pt = _scanPoints[i];
-        if (pt.polarPoint.theta <= 0.17 && pt.polarPoint.theta >= -0.17)
-        {
-            points.push_back(pt);
-        }
-    }
-    return points;
 }
 
 void LineSegmenter::_markLine(std::vector<ScanPoint> _scanPoints)
@@ -81,9 +77,10 @@ void LineSegmenter::_extractPoints(const sensor_msgs::LaserScan& scanMsg)
 {
     _laserFrame = scanMsg.header.frame_id;
     _scanPoints.clear();
+    double searchRange = std::min<double>((double)scanMsg.range_max, _searchRadius);
     for (int i = 0; i < (int)scanMsg.ranges.size(); i++)
     {
-        if (!std::isinf(scanMsg.ranges[i]) && (scanMsg.ranges[i] <= scanMsg.range_max))
+        if (!std::isinf(scanMsg.ranges[i]) && (scanMsg.ranges[i] <= searchRange))
         {
             ScanPoint pt;
             pt.polarPoint.distance = scanMsg.ranges[i];
@@ -327,8 +324,9 @@ void LineSegmenter::_generateSegments()
     for (int i = 0; i < (int)_segments.size(); i++)
     {
         auto seg = _segments[i];
-        // Remove lines that are too short.
-        if (_pt2PtDist2D(seg.firstPoint.cartesianPoint, seg.lastPoint.cartesianPoint) < _minLen)
+        // Remove lines that are too short or too long.
+        auto segLen = _pt2PtDist2D(seg.firstPoint.cartesianPoint, seg.lastPoint.cartesianPoint);
+        if (segLen < _minLen || segLen > _maxLen)
         {
             _segments.erase(_segments.begin() + i);
         }
@@ -392,7 +390,6 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
         {
             seed.outlierMask[pf] = true;
             outlierCnt++;
-            // ROS_INFO_STREAM("seed: " << seed.firstIdx << "outlier: " << outlierCnt);
         }
         else
         {
@@ -466,6 +463,7 @@ void LineSegmenter::_processOverlap()
     }
 
     // Properly separate non-collinear segments.
+    // TODO: Fix this not separating properly due to 'mixing' indices.
     for (int i = 0; i < ((int)_segments.size() - 1); i++)
     {
         auto& firstSeg = _segments[i];

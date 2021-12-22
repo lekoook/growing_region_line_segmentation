@@ -10,7 +10,11 @@ seed_segment_points: 10
 segment_min_points: 15
 
 # The maximum distance (metre) from a seed segment point to the seed segment line.
+# This value should roughly coincide with the precision of the laser device.
 point_to_line_threshold_m: 0.03
+
+# The maximum distance (metre) from a seed segment point to the predicted point on the seed segment.
+point_to_point_threshold_m: 0.1
 
 # The maximum distance (metre) to consider a data point being an outlier during region growing.
 growth_outlier_threshold_m: 0.05
@@ -18,13 +22,20 @@ growth_outlier_threshold_m: 0.05
 # The maximum number of consecutive outlier points before stopping region growth.
 growth_outlier_max_count: 5
 
-# The maximum distance (metre) from a seed segment point to the predicted point on the seed segment.
-point_to_point_threshold_m: 0.1
-
 # The maximum angle (rad) difference between two segments to consider them collinear.
 collinear_threshold_rad: 0.1
 
 # The frequency at which to compute the lines and publish.
 update_frequency: 10.0
 
+# The minimum line length to be published.
 min_line_length_m: 0.3
+
+# The maximum line length to be published.
+# Use value <= 0 to disable the maximum limit.
+max_line_length_m: 0.0
+
+# The radius around the laser device's that will be searched.
+# Laser data points outside of this radius will be ignored.
+# Use value <= 0 to search as far as the max range of the LaserScan message.
+search_radius_m: 0.0
