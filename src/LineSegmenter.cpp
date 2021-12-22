@@ -9,6 +9,7 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     ros::param::param<int>("~segment_min_points", _segMinPoints, 20);
     ros::param::param<double>("~point_to_line_threshold_m", _ptToLineThresh, 0.01f);
     ros::param::param<double>("~growth_outlier_threshold_m", _outlierThresh, 0.1f);
+    ros::param::param<int>("~growth_outlier_max_count", _outlierMaxCount, 3);
     ros::param::param<double>("~point_to_point_threshold_m", _ptToPtThresh, 0.1f);
     ros::param::param<double>("~collinear_threshold_rad", _colThresh, 0.1f);
     ros::param::param<double>("~update_frequency", _updateFreq, 10.0f);
@@ -24,17 +25,9 @@ void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
     if (_toCompute)
     {
         _toCompute = false;
-        _clearLines("seed_segments");
-        _clearLines("raw_segments");
-        _clearLines("processed");
-        _clearLines("points_sequence");
-        _clearLines("previous");
+        _clearLines();
         _extractPoints(*msg);
-        ROS_INFO_STREAM(_scanPoints.size());
         _generateSegments();
-
-        // auto filtered = _filterFront();
-        // _markLine(filtered);
     }
 }
 
@@ -128,7 +121,7 @@ double LineSegmenter::_pt2LineSegmentDist2D(Point point, LineSegment lineSegment
 {
     double x = point.x;
     double y = point.y;
-    lineSegment.generateEndpoints();
+    lineSegment.generateEndpoints(); 
     double x1 = lineSegment.startPoint.x;
     double y1 = lineSegment.startPoint.y;
     double x2 = lineSegment.endPoint.x;
@@ -315,7 +308,7 @@ void LineSegmenter::_generateSegments()
     _generateEndpoints();
     for (auto seg : _segments)
     {
-        _markLine(seg.firstPoint.cartesianPoint, seg.lastPoint.cartesianPoint, procId++, "processed");
+        _markLine(seg.startPoint, seg.endPoint, procId++, "processed");
     }
 }
 
@@ -323,24 +316,23 @@ bool LineSegmenter::_generateSeed(int start, int end, LineSegment& seed_)
 {
     Line bestLine = _orthgLineFit(start, end, seed_.outlierMask);
     bool foundSeed = true;
+    Point prevPt = _scanPoints[start].cartesianPoint;
     for (int k = start; k < end; k++)
     {
         Point pt = _scanPoints[k].cartesianPoint;
         Point pPt = _getPredictedPt(_scanPoints[k].polarPoint.theta, bestLine);
         double pt2PtDist = _pt2PtDist2D(pt, pPt);
         double pt2LineDist = _pt2LineDist2D(pt, bestLine);
+        double pt2PrevPtDist = _pt2PtDist2D(pt, prevPt);
 
-        if (pt2PtDist > _ptToPtThresh)
+        if (pt2PtDist > _ptToPtThresh || pt2LineDist > _ptToLineThresh || pt2PrevPtDist > _ptToPtThresh)
         {
             foundSeed = false;
             break;
         }
 
-        if (pt2LineDist > _ptToLineThresh)
-        {
-            foundSeed = false;
-            break;
-        }
+        prevPt = pt;
+
     }
     if (foundSeed)
     {
@@ -364,12 +356,13 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
 
     // Refit and grow the end.
     pf = pf + 1;
-    while (pf < (int)_scanPoints.size() && outlierCnt < 5)
+    while (pf < (int)_scanPoints.size() && outlierCnt < _outlierMaxCount)
     {
         if (_pt2LineSegmentDist2D(_scanPoints[pf].cartesianPoint, seed) > _outlierThresh)
         {
             seed.outlierMask[pf] = true;
             outlierCnt++;
+            // ROS_INFO_STREAM("seed: " << seed.firstIdx << "outlier: " << outlierCnt);
         }
         else
         {
@@ -388,7 +381,7 @@ bool LineSegmenter::_growSeed(LineSegment& seed)
 
     // Refit and grow the start.
     pb = pb - 1;
-    while (pb >= 0 && outlierCnt < 5)
+    while (pb >= 0 && outlierCnt < _outlierMaxCount)
     {
         if (_pt2LineSegmentDist2D(_scanPoints[pb].cartesianPoint, seed) > _outlierThresh)
         {
@@ -518,9 +511,26 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, int id, std::string ns)
     marker.pose.orientation.w = 1.0;
     marker.scale.x = 0.01;
     marker.color.a = 1.0; // Don't forget to set the alpha!
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
+    if (ns == "seed_segments")
+    {
+        marker.color.r = 1.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        marker.scale.x = 0.07;
+    }
+    else if (ns == "previous")
+    {
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 1.0;
+    }
+    else
+    {
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
+        marker.scale.x = 0.01;
+    }
     marker.points.push_back(pt1);
     marker.points.push_back(pt2);
     _lineMarkerPub.publish(marker);
@@ -536,8 +546,8 @@ void LineSegmenter::_markLine(Line line, double x, int id, std::string ns)
     _markLine(pt1, pt2, id, ns);
 }
 
-void LineSegmenter::_clearLines(std::string ns)
+void LineSegmenter::_clearLines()
 {
     Line line;
-    _markLine(line, 0.0, -1, ns);
+    _markLine(line, 0.0, -1, "");
 }

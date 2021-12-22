@@ -3,17 +3,20 @@ scan_topic: scan
 
 # The number of points a seed segment should contain.
 # This value should be LESSER than "segment_min_points" value.
-seed_segment_points: 6
+seed_segment_points: 10
 
 # The number of points a full line segment should contain.
 # This value should be GREATER than "seed_segment_points" value.
-segment_min_points: 10
+segment_min_points: 15
 
 # The maximum distance (metre) from a seed segment point to the seed segment line.
 point_to_line_threshold_m: 0.03
 
 # The maximum distance (metre) to consider a data point being an outlier during region growing.
-growth_outlier_threshold_m: 0.03
+growth_outlier_threshold_m: 0.04
+
+# The maximum number of consecutive outlier points before stopping region growth.
+growth_outlier_max_count: 5
 
 # The maximum distance (metre) from a seed segment point to the predicted point on the seed segment.
 point_to_point_threshold_m: 0.1

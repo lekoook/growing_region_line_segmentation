@@ -88,6 +88,7 @@ private:
     ros::Timer _computeTimer;
     int _seedSegPoints;
     int _segMinPoints;
+    int _outlierMaxCount;
     double _ptToLineThresh;
     double _outlierThresh;
     double _ptToPtThresh;
@@ -109,6 +110,7 @@ private:
     std::vector<bool> _orOutlierMask(std::vector<bool>& first, std::vector<bool>& second);
     Point _getPredictedPt(double pointBearing, Line line);
     Line _orthgLineFit(int start, int end, std::vector<bool>& outlierMask);
+    bool _lineSegmentsOverlap(LineSegment& first, LineSegment& second);
     void _generateSegments();
     bool _generateSeed(int start, int end, LineSegment& seed_);
     bool _growSeed(LineSegment& seed);
@@ -122,7 +124,7 @@ private:
     void _markLine(Point pt1, Point pt2, int id=-1, std::string ns="lines");
     void _markLine(Line line, double x, int id=-1, std::string ns="lines");
     void _markLine(std::vector<ScanPoint> _scanPoints);
-    void _clearLines(std::string ns="lines");
+    void _clearLines();
 
 public:
     LineSegmenter();
