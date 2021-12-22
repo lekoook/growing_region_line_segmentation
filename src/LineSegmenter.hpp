@@ -107,10 +107,12 @@ private:
     double _pt2PtDist2D(Point point1, Point point2);
     double _pt2LineDist2D(Point point, Line line);
     double _pt2LineSegmentDist2D(Point point, LineSegment lineSegment);
+    double _pt2LineSegmentDist2D(Point point, LineSegment lineSegment, double& pointPos_);
     std::vector<bool> _orOutlierMask(std::vector<bool>& first, std::vector<bool>& second);
     Point _getPredictedPt(double pointBearing, Line line);
     Line _orthgLineFit(int start, int end, std::vector<bool>& outlierMask);
-    bool _lineSegmentsOverlap(LineSegment& first, LineSegment& second);
+    bool _collinearOverlap(const LineSegment& first, const LineSegment& second);
+    bool _lineSegmentsIntersect(LineSegment& first, LineSegment& second);
     void _generateSegments();
     bool _generateSeed(int start, int end, LineSegment& seed_);
     bool _growSeed(LineSegment& seed);

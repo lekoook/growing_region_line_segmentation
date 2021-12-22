@@ -119,6 +119,12 @@ double LineSegmenter::_pt2LineDist2D(Point point, Line line)
 
 double LineSegmenter::_pt2LineSegmentDist2D(Point point, LineSegment lineSegment)
 {
+    double dummy;
+    return _pt2LineSegmentDist2D(point, lineSegment, dummy);
+}
+
+double LineSegmenter::_pt2LineSegmentDist2D(Point point, LineSegment lineSegment, double& pointPos_)
+{
     double x = point.x;
     double y = point.y;
     lineSegment.generateEndpoints(); 
@@ -133,28 +139,28 @@ double LineSegmenter::_pt2LineSegmentDist2D(Point point, LineSegment lineSegment
 
     double dot = A * C + B * D;
     double len_sq = C * C + D * D;
-    int param = -1;
+    pointPos_ = -1.0f;
     if (len_sq != 0) //in case of 0 length line
     {
-        param = dot / len_sq;
+        pointPos_ = dot / len_sq;
     }
 
     double xx, yy;
 
-    if (param < 0)
+    if (pointPos_ < 0)
     {
         xx = x1;
         yy = y1;
     }
-    else if (param > 1)
+    else if (pointPos_ > 1)
     {
         xx = x2;
         yy = y2;
     }
     else
     {
-        xx = x1 + param * C;
-        yy = y1 + param * D;
+        xx = x1 + pointPos_ * C;
+        yy = y1 + pointPos_ * D;
     }
 
     double dx = x - xx;
@@ -260,6 +266,30 @@ Line LineSegmenter::_orthgLineFit(int start, int end, std::vector<bool>& outlier
     line.yCoeff = yCoeff;
     line.constant = constant;
     return line;
+}
+
+bool LineSegmenter::_collinearOverlap(const LineSegment& first, const LineSegment& second)
+{
+    // First check if the two segments are collinear. Return immediately if not.
+    double firstTheta = atan2(-first.line.xCoeff, first.line.yCoeff);
+    double secondTheta = atan2(-second.line.xCoeff, second.line.yCoeff);
+    double deltaTheta = fabs(firstTheta - secondTheta);
+    bool collinear = deltaTheta < _colThresh;
+    if (!collinear)
+    {
+        return false;
+    }
+
+    /* 
+    Check if any of the end points of one segment is within the two endpoints of the other segment and if that endpoint 
+    is close to the other segment (closest distance).
+    */
+    double pointPos = 0.0f;
+    double dist1 = _pt2LineSegmentDist2D(first.endPoint, second, pointPos);
+    bool pt1 = (dist1 < 0.1 && (pointPos >=0) && (pointPos <=1));
+    double dist2 = _pt2LineSegmentDist2D(first.startPoint, second, pointPos);
+    bool pt2 = (dist2 < 0.1 && (pointPos >=0) && (pointPos <=1));
+    return pt1 || pt2;
 }
 
 void LineSegmenter::_generateSegments()
@@ -415,29 +445,22 @@ void LineSegmenter::_processOverlap()
     for (int i = 0; i < ((int)_segments.size() - 1); i++)
     {
         auto& first = _segments[i];
-        for (int j = i + 1; j < _segments.size(); j++)
+        for (int j = i + 1; j < (int)_segments.size(); j++)
         {
             auto second = _segments[j];
-            if (first.lastIdx >= second.firstIdx)
+            if (_collinearOverlap(first, second))
             {
-                double firstTheta = atan2(-first.line.xCoeff, first.line.yCoeff);
-                double secondTheta = atan2(-second.line.xCoeff, second.line.yCoeff);
-                double deltaTheta = fabs(firstTheta - secondTheta);
-
-                if (deltaTheta < _colThresh)
-                {
-                    int newStart = std::min<double>(first.firstIdx, second.firstIdx);
-                    auto outlier = _orOutlierMask(first.outlierMask, second.outlierMask);
-                    auto newBestLine = _orthgLineFit(newStart, second.lastIdx, outlier);
-                    first.outlierMask = outlier;
-                    first.line = newBestLine;
-                    first.firstIdx = newStart;
-                    first.lastIdx = second.lastIdx;
-                    first.firstPoint = _scanPoints[first.firstIdx];
-                    first.lastPoint = _scanPoints[first.lastIdx];
-                    _segments.erase(_segments.begin() + j);
-                    j--;
-                }
+                int newStart = std::min<double>(first.firstIdx, second.firstIdx);
+                auto outlier = _orOutlierMask(first.outlierMask, second.outlierMask);
+                auto newBestLine = _orthgLineFit(newStart, second.lastIdx, outlier);
+                first.outlierMask = outlier;
+                first.line = newBestLine;
+                first.firstIdx = newStart;
+                first.lastIdx = second.lastIdx;
+                first.firstPoint = _scanPoints[first.firstIdx];
+                first.lastPoint = _scanPoints[first.lastIdx];
+                _segments.erase(_segments.begin() + j);
+                j--;
             }
         }
     }
@@ -523,6 +546,13 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, int id, std::string ns)
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 1.0;
+    }
+    else if (ns == "processed")
+    {
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 1.0;
+        marker.scale.x = 0.01;
     }
     else
     {
