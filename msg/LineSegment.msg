@@ -1,0 +1,3 @@
+geometry_msgs/Point endpoint_1
+geometry_msgs/Point endpoint_2
+float32 confidence

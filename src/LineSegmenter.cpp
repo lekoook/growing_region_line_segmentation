@@ -1,5 +1,9 @@
 #include "LineSegmenter.hpp"
 #include <visualization_msgs/Marker.h>
+#include <growing_region_line_segmentation/LineSegmentsList.h>
+
+typedef growing_region_line_segmentation::LineSegment LineMsg;
+typedef growing_region_line_segmentation::LineSegmentsList LinesListMsg;
 
 LineSegmenter::LineSegmenter() : _toCompute(false)
 {
@@ -27,6 +31,7 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
         _searchRadius = std::numeric_limits<double>::infinity();
     }
     
+    _linesPub = _nh.advertise<LinesListMsg>("segmented_lines", 1);
     _lineMarkerPub = _nh.advertise<visualization_msgs::Marker>("line_marker", 0);
     _scanSub = _nh.subscribe(scanTopic, 1, &LineSegmenter::_scanCb, this);
     _computeTimer = _nh.createTimer(ros::Duration(1.0 / _updateFreq), &LineSegmenter::_timerCb, this);
@@ -39,6 +44,7 @@ void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
         _toCompute = false;
         _extractPoints(*msg);
         _generateSegments();
+        _pubSegments(msg->header.stamp);
     }
 }
 
@@ -509,6 +515,23 @@ void LineSegmenter::_generateEndpoints()
     {
         seg.generateEndpoints();
     }
+}
+
+void LineSegmenter::_pubSegments(ros::Time rosTime)
+{
+    LinesListMsg list;
+    list.header.frame_id = _laserFrame;
+    list.header.seq = _headerSeq++;
+    list.header.stamp = rosTime;
+    for (auto& seg : _segments)
+    {
+        LineMsg line;
+        line.endpoint_1 = seg.startPoint;
+        line.endpoint_2 = seg.endPoint;
+        // TODO: Fill up confidence field.
+        list.lines.push_back(line);
+    }
+    _linesPub.publish(list);
 }
 
 void LineSegmenter::_markLine(Point pt1, Point pt2, int id, std::string ns)

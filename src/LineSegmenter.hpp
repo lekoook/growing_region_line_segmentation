@@ -83,9 +83,11 @@ class LineSegmenter
 {
 private:
     ros::NodeHandle _nh;
+    ros::Publisher _linesPub;
     ros::Publisher _lineMarkerPub;
     ros::Subscriber _scanSub;
     ros::Timer _computeTimer;
+    uint32_t _headerSeq;
     int _seedSegPoints;
     int _segMinPoints;
     int _outlierMaxCount;
@@ -121,8 +123,7 @@ private:
     bool _growSeed(LineSegment& seed);
     void _processOverlap();
     void _generateEndpoints();
-
-    std::vector<ScanPoint> _filterFront();
+    void _pubSegments(ros::Time rosTime);
 
     // Visualization helpers
     int _lineId = 0;
