@@ -552,6 +552,7 @@ void LineSegmenter::_pubSegments(ros::Time rosTime)
 
 void LineSegmenter::_markLine(Point pt1, Point pt2, double mean, int id, std::string ns)
 {
+    bool showEndpoints = false;
     visualization_msgs::Marker marker;
     marker.header.frame_id = _laserFrame;
     marker.header.stamp = ros::Time();
@@ -591,6 +592,7 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, double mean, int id, std::st
         marker.color.g = 0.5;
         marker.color.b = 1.0;
         marker.scale.x = 0.01;
+        showEndpoints = true;
     }
     else
     {
@@ -603,22 +605,66 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, double mean, int id, std::st
     marker.points.push_back(pt2);
     _lineMarkerPub.publish(marker);
 
-    visualization_msgs::Marker meanMarker;
-    meanMarker.header.frame_id = _laserFrame;
-    meanMarker.header.stamp = ros::Time();
-    meanMarker.ns = "means";
-    meanMarker.id = id;
-    meanMarker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-    meanMarker.scale.z = 0.05;
-    meanMarker.color.a = 1.0; // Don't forget to set the alpha!
-    meanMarker.color.r = 0.0;
-    meanMarker.color.g = 1.0;
-    meanMarker.color.b = 0.0;
-    meanMarker.pose.position.x = (pt1.x + pt2.x) / 2.0f;
-    meanMarker.pose.position.y = (pt1.y + pt2.y) / 2.0f;
-    meanMarker.pose.position.z = 0.2;
-    meanMarker.text = std::to_string(mean);
-    _lineMarkerPub.publish(meanMarker);
+    if (showEndpoints)
+    {
+        visualization_msgs::Marker ep1;
+        ep1.header.frame_id = _laserFrame;
+        ep1.header.stamp = marker.header.stamp;
+        ep1.ns = "end_points";
+        ep1.id = id + 10000;
+        ep1.type = visualization_msgs::Marker::SPHERE;
+        ep1.action = visualization_msgs::Marker::ADD;
+        ep1.pose.position = pt1;
+        ep1.pose.orientation.x = 0.0;
+        ep1.pose.orientation.y = 0.0;
+        ep1.pose.orientation.z = 0.0;
+        ep1.pose.orientation.w = 1.0;
+        ep1.scale.x = 0.03;
+        ep1.scale.y = 0.03;
+        ep1.scale.z = 0.03;
+        ep1.color.a = 1.0; // Don't forget to set the alpha!
+        ep1.color.r = 0.0;
+        ep1.color.g = 1.0;
+        ep1.color.b = 0.0;
+        _lineMarkerPub.publish(ep1);
+        visualization_msgs::Marker ep2;
+        ep2.header.frame_id = _laserFrame;
+        ep2.header.stamp = marker.header.stamp;
+        ep2.ns = "end_points";
+        ep2.id = id + 20000;
+        ep2.type = visualization_msgs::Marker::SPHERE;
+        ep2.action = visualization_msgs::Marker::ADD;
+        ep2.pose.position = pt2;
+        ep2.pose.orientation.x = 0.0;
+        ep2.pose.orientation.y = 0.0;
+        ep2.pose.orientation.z = 0.0;
+        ep2.pose.orientation.w = 1.0;
+        ep2.scale.x = 0.03;
+        ep2.scale.y = 0.03;
+        ep2.scale.z = 0.03;
+        ep2.color.a = 1.0; // Don't forget to set the alpha!
+        ep2.color.r = 1.0;
+        ep2.color.g = 0.0;
+        ep2.color.b = 0.0;
+        _lineMarkerPub.publish(ep2);
+
+        visualization_msgs::Marker meanMarker;
+        meanMarker.header.frame_id = _laserFrame;
+        meanMarker.header.stamp = ros::Time();
+        meanMarker.ns = "means";
+        meanMarker.id = id;
+        meanMarker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+        meanMarker.scale.z = 0.05;
+        meanMarker.color.a = 1.0; // Don't forget to set the alpha!
+        meanMarker.color.r = 0.0;
+        meanMarker.color.g = 1.0;
+        meanMarker.color.b = 0.0;
+        meanMarker.pose.position.x = (pt1.x + pt2.x) / 2.0f;
+        meanMarker.pose.position.y = (pt1.y + pt2.y) / 2.0f;
+        meanMarker.pose.position.z = 0.2;
+        meanMarker.text = std::to_string(mean);
+        _lineMarkerPub.publish(meanMarker);
+    }
 }
 
 void LineSegmenter::_markLine(Line line, double x, int id, std::string ns)
