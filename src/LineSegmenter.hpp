@@ -1,4 +1,5 @@
 #include <ros/ros.h>
+#include <std_msgs/Int32.h>
 #include <sensor_msgs/LaserScan.h>
 #include <geometry_msgs/Point.h>
 
@@ -85,8 +86,10 @@ private:
     ros::NodeHandle _nh;
     ros::Publisher _linesPub;
     ros::Publisher _lineMarkerPub;
+    ros::Subscriber _deadmanSub;
     ros::Subscriber _scanSub;
     ros::Timer _computeTimer;
+    ros::Timer _deadmanTimer;
     uint32_t _headerSeq;
     int _seedSegPoints;
     int _segMinPoints;
@@ -100,13 +103,17 @@ private:
     double _minLen;
     double _maxLen;
     double _searchRadius;
+    double _deadmanTimeout;
     bool _toCompute;
+    bool _deadmanOn;
     std::string _laserFrame;
     std::vector<ScanPoint> _scanPoints;
     std::vector<LineSegment> _segments;
 
+    void _deadmanCb(const std_msgs::Int32ConstPtr& msg);
     void _scanCb(const sensor_msgs::LaserScanConstPtr& msg);
     void _timerCb(const ros::TimerEvent& event);
+    void _deadmanTimerCb(const ros::TimerEvent& event);
     void _extractPoints(const sensor_msgs::LaserScan& scanMsg);
     Point _polar2Cart(PolarPoint2D polarPoint2D);
     double _pt2PtDist2D(Point point1, Point point2);

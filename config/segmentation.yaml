@@ -1,6 +1,13 @@
 # The topic of LaserScan messages to subscribe to for segmentation.
 scan_topic: scan
 
+# The topic that line segments listener should publish to activate line segment computation.
+deadman_topic: line_seg_deadman
+
+# The timeout duration (seconds) for the deadman switch. If there are no message published on the deadman topic within 
+# this time duration, the deadman will be activated and no line segment computations will be done.
+deadman_timeout_s: 0.5
+
 # The number of points a seed segment should contain.
 # This value should be LESSER than "segment_min_points" value.
 seed_segment_points: 10

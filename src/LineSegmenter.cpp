@@ -5,10 +5,12 @@
 typedef growing_region_line_segmentation::LineSegment LineMsg;
 typedef growing_region_line_segmentation::LineSegmentsList LinesListMsg;
 
-LineSegmenter::LineSegmenter() : _toCompute(false)
+LineSegmenter::LineSegmenter() : _toCompute(false), _deadmanOn(true)
 {
     std::string scanTopic;
+    std::string deadmanTopic;
     ros::param::param<std::string>("~scan_topic", scanTopic, "scan");
+    ros::param::param<std::string>("~deadman_topic", deadmanTopic, "line_seg_deadman");
     ros::param::param<int>("~seed_segment_points", _seedSegPoints, 10);
     ros::param::param<int>("~segment_min_points", _segMinPoints, 20);
     ros::param::param<double>("~point_to_line_threshold_m", _ptToLineThresh, 0.01f);
@@ -21,6 +23,7 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     ros::param::param<double>("~min_line_length_m", _minLen, 0.1f);
     ros::param::param<double>("~max_line_length_m", _maxLen, 3.0f);
     ros::param::param<double>("~search_radius_m", _searchRadius, 3.0f);
+    ros::param::param<double>("~deadman_timeout_s", _deadmanTimeout, 0.5f);
 
     if (_maxLen <= 0)
     {
@@ -33,13 +36,26 @@ LineSegmenter::LineSegmenter() : _toCompute(false)
     
     _linesPub = _nh.advertise<LinesListMsg>("segmented_lines", 1);
     _lineMarkerPub = _nh.advertise<visualization_msgs::Marker>("line_marker", 0);
+    _deadmanSub = _nh.subscribe(deadmanTopic, 1, &LineSegmenter::_deadmanCb, this);
     _scanSub = _nh.subscribe(scanTopic, 1, &LineSegmenter::_scanCb, this);
     _computeTimer = _nh.createTimer(ros::Duration(1.0 / _updateFreq), &LineSegmenter::_timerCb, this);
+    _deadmanTimer = _nh.createTimer(ros::Duration(_deadmanTimeout), &LineSegmenter::_deadmanTimerCb, this, true, false);
 };
+
+void LineSegmenter::_deadmanCb(const std_msgs::Int32ConstPtr& msg)
+{
+    // '1' to hold down the deadman switch
+    if (msg->data == 1)
+    {
+        _deadmanTimer.stop();
+        _deadmanOn = false;
+        _deadmanTimer.start();
+    }
+}
 
 void LineSegmenter::_scanCb(const sensor_msgs::LaserScanConstPtr& msg)
 {
-    if (_toCompute)
+    if (_toCompute && !_deadmanOn)
     {
         _toCompute = false;
         _extractPoints(*msg);
@@ -78,6 +94,11 @@ void LineSegmenter::_markLine(std::vector<ScanPoint> _scanPoints)
 void LineSegmenter::_timerCb(const ros::TimerEvent& event)
 {
     _toCompute = true;
+}
+
+void LineSegmenter::_deadmanTimerCb(const ros::TimerEvent& event)
+{
+    _deadmanOn = true;
 }
 
 void LineSegmenter::_extractPoints(const sensor_msgs::LaserScan& scanMsg)
