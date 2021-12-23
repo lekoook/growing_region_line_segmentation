@@ -578,7 +578,7 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, double mean, int id, std::st
         marker.color.r = 1.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-        marker.scale.x = 0.07;
+        marker.scale.x = 0.02;
     }
     else if (ns == "previous")
     {
