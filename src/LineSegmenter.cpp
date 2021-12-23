@@ -315,13 +315,13 @@ void LineSegmenter::_generateSegments()
         seed.outlierMask = std::vector<bool>(_scanPoints.size(), false);
         if (_generateSeed(start, end, seed))
         {
-            _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, seedId++, "seed_segments");
+            _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, 0.0, seedId++, "seed_segments");
             // Grow this seed into a full line segment.
             if (_growSeed(seed))
             {
                 start = seed.lastIdx;
                 _segments.push_back(seed);
-                _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, fullId++, "raw_segments");
+                _markLine(seed.firstPoint.cartesianPoint, seed.lastPoint.cartesianPoint, 0.0, fullId++, "raw_segments");
             }
         }
     }
@@ -343,7 +343,7 @@ void LineSegmenter::_generateSegments()
     _generateEndpoints();
     for (auto seg : _segments)
     {
-        _markLine(seg.startPoint, seg.endPoint, procId++, "processed");
+        _markLine(seg.startPoint, seg.endPoint, _segmentMean(seg), procId++, "processed");
     }
 }
 
@@ -517,6 +517,22 @@ void LineSegmenter::_generateEndpoints()
     }
 }
 
+double LineSegmenter::_segmentMean(LineSegment& segment)
+{
+    int samples = 0;
+    double sum = 0.0f;
+    for (int i = segment.firstIdx; i <= segment.lastIdx; i++)
+    {
+        if (!segment.outlierMask[i])
+        {
+            double dist = _pt2LineDist2D(_scanPoints[i].cartesianPoint, segment.line) * 1000.0f;
+            sum += (dist * dist) / 1000.0f;
+            samples++;
+        }
+    }
+    return (sum / (double)samples);
+}
+
 void LineSegmenter::_pubSegments(ros::Time rosTime)
 {
     LinesListMsg list;
@@ -528,13 +544,13 @@ void LineSegmenter::_pubSegments(ros::Time rosTime)
         LineMsg line;
         line.endpoint_1 = seg.startPoint;
         line.endpoint_2 = seg.endPoint;
-        // TODO: Fill up confidence field.
+        line.mean_sq_m = _segmentMean(seg);
         list.lines.push_back(line);
     }
     _linesPub.publish(list);
 }
 
-void LineSegmenter::_markLine(Point pt1, Point pt2, int id, std::string ns)
+void LineSegmenter::_markLine(Point pt1, Point pt2, double mean, int id, std::string ns)
 {
     visualization_msgs::Marker marker;
     marker.header.frame_id = _laserFrame;
@@ -586,6 +602,23 @@ void LineSegmenter::_markLine(Point pt1, Point pt2, int id, std::string ns)
     marker.points.push_back(pt1);
     marker.points.push_back(pt2);
     _lineMarkerPub.publish(marker);
+
+    visualization_msgs::Marker meanMarker;
+    meanMarker.header.frame_id = _laserFrame;
+    meanMarker.header.stamp = ros::Time();
+    meanMarker.ns = "means";
+    meanMarker.id = id;
+    meanMarker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+    meanMarker.scale.z = 0.05;
+    meanMarker.color.a = 1.0; // Don't forget to set the alpha!
+    meanMarker.color.r = 0.0;
+    meanMarker.color.g = 1.0;
+    meanMarker.color.b = 0.0;
+    meanMarker.pose.position.x = (pt1.x + pt2.x) / 2.0f;
+    meanMarker.pose.position.y = (pt1.y + pt2.y) / 2.0f;
+    meanMarker.pose.position.z = 0.2;
+    meanMarker.text = std::to_string(mean);
+    _lineMarkerPub.publish(meanMarker);
 }
 
 void LineSegmenter::_markLine(Line line, double x, int id, std::string ns)
@@ -595,7 +628,7 @@ void LineSegmenter::_markLine(Line line, double x, int id, std::string ns)
     pt1.y = -((line.xCoeff * pt1.x) + line.constant) / line.yCoeff;
     pt2.x = x;
     pt2.y = -((line.xCoeff * pt2.x) + line.constant) / line.yCoeff;
-    _markLine(pt1, pt2, id, ns);
+    _markLine(pt1, pt2, 0.0, id, ns);
 }
 
 void LineSegmenter::_clearLines()
